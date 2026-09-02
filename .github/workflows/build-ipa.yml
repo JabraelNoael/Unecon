@@ -1,0 +1,41 @@
+name: Build VoiceApp IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "VoiceApp/**"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: VoiceApp
+        run: xcodegen generate
+
+      - name: Build unsigned .app for a real device
+        working-directory: VoiceApp
+        run: |
+          xcodebuild -project VoiceApp.xcodeproj -scheme VoiceApp \
+            -sdk iphoneos -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package as .ipa
+        working-directory: VoiceApp
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Debug-iphoneos/VoiceApp.app Payload/
+          zip -r VoiceApp.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceApp-ipa
+          path: VoiceApp/VoiceApp.ipa
