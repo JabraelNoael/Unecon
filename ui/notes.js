@@ -23,7 +23,7 @@ function analyze() {
   const topics = [...df].filter(([k, c]) => c >= 2 && !covered.has(k))
     .map(([k, c]) => ({ k, c, s: c * idf(k) * (k.includes(' ') ? 1.4 : 1) })).sort((a, b) => b.s - a.s).slice(0, 16).map(t => t.k);
   const vecs = docs.map(d => topics.map(k => (d.get(k) || 0) * idf(k)));
-  return { docs, topics, vecs };
+  return { docs, topics, vecs, df };
 }
 const cos = (a, b) => { let d = 0, x = 0, y = 0; a.forEach((v, i) => { d += v * b[i]; x += v * v; y += b[i] * b[i]; }); return x && y ? d / Math.sqrt(x * y) : 0; };
 function pca(vecs) {                                                  // top-2 principal components via power iteration on the n×n Gram matrix
@@ -112,8 +112,8 @@ function draw() {
   if (!G.nodes.length) { g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = '#877d90'; g.font = '15px Alegreya Sans, sans-serif'; g.textAlign = 'center'; g.fillText('Nothing here yet', G.w / 2, G.h / 2); }
 }
 (function loop() {
-  const p = parseFloat(phone.style.getPropertyValue('--p')) || 1;
-  if (Math.abs(p - 3) < 1.05) { step(); if (G.dirty) draw(); }
+  const p = parseFloat(phone.style.getPropertyValue('--p')) || 2;
+  if (Math.abs(p - 4) < 1.05) { step(); if (G.dirty) draw(); }
   requestAnimationFrame(loop);
 })();
 
@@ -177,13 +177,14 @@ $('#noteList').onclick = async e => {
   const el = e.target.closest('.note'); if (!el) return;
   const n = notes.find(x => x.id == el.dataset.id);
   if (e.target.closest('.hd')) { openId = openId === n.id ? null : n.id; if (openId) sel = G.by['n:' + n.id] || null; renderList(); info(); }
-  else if (e.target.closest('[data-save]')) { n.text = $('[data-text]', el).value; await R.db.put(n); toast('Transcript saved'); load(); }
+  else if (e.target.closest('[data-save]')) { n.text = $('[data-text]', el).value; await R.db.put(n); toast('Transcript saved'); load(); if (R.memory) R.memory.ingest(n); }
   else if (e.target.closest('[data-dl]')) { const a = document.createElement('a'); a.href = URL.createObjectURL(n.blob); a.download = `${n.title.replace(/[^\w -]+/g, '')}.${ext(n.mime)}`; a.click(); }
   else if (e.target.closest('[data-rm]')) { const b = e.target.closest('[data-rm]'); if (b.dataset.sure) { await R.db.del(n.id); openId = null; toast('Deleted'); load(); } else { b.dataset.sure = 1; b.textContent = 'Really delete?'; } }
 };
 $('#noteList').onchange = async e => { if (!e.target.matches('[data-subj]')) return; const n = notes.find(x => x.id == e.target.closest('.note').dataset.id); n.subject = e.target.value; await R.db.put(n); load(); };
 
-async function load() { notes = (await R.db.all()).sort((a, b) => b.created - a.created); buildGraph(); renderList(); }
+async function load() { notes = (await R.db.all()).sort((a, b) => b.created - a.created); buildGraph(); renderList(); if (R.onNotes) R.onNotes(); }
 R.notesChanged = load;
+R.analyze = () => ({ ...analyze(), notes });
 load();
 })();

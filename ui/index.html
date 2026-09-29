@@ -17,19 +17,46 @@
 
   <!-- persistent header: the character slot -->
   <header class="head">
-    <div class="rec" id="rec"><i></i><span id="clock">READY</span><button id="stopBtn" class="stop" aria-label="Stop and save" hidden></button></div>
+    <div class="rec" id="rec"><i></i><span id="clock">READY</span></div>
     <div class="orb" id="orb" role="button" aria-label="Start, pause or resume listening" tabindex="0">
       <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
       <div class="core"></div>
     </div>
     <div class="tap" id="tap">Tap Rowan to start listening</div>
     <div class="titles" id="titles">
-      <span>Actions</span><span>Listening</span><span>Schedule</span><span>Notes</span>
+      <span>Lab</span><span>Actions</span><span>Listening</span><span>Schedule</span><span>Notes</span>
     </div>
   </header>
 
   <!-- horizontal pager: Actions ← Listen → Schedule -->
   <main class="pager" id="pager">
+    <section class="page" id="pg-lab" aria-label="Lab">
+      <div class="scroll">
+        <div class="blk">
+          <h2>Voice lab</h2>
+          <p class="hint" style="margin-top:6px">Run the same audio through different transcribers and speaker-splitters, then compare.</p>
+          <div class="tiles" id="labSrc"></div>
+          <audio id="labAudio" controls preload="metadata" style="width:100%;margin-top:12px;display:none"></audio>
+          <div id="labSrcInfo" class="hint" style="margin-top:8px"></div>
+          <label class="field" style="margin-top:10px"><span>Reference transcript (optional, enables accuracy %)</span><textarea class="inp" id="labRef" placeholder="Type or paste what was actually said"></textarea></label>
+        </div>
+        <div class="blk">
+          <h3>Transcribers</h3><div class="tiles two" id="labAsr"></div>
+          <h3 style="margin-top:18px">Speaker splitters</h3><div class="tiles two" id="labDiar"></div>
+          <div class="tiles" style="margin-top:12px"><button class="tile" id="labFirst" style="--c:var(--arcane)"><span class="mono-g">Df</span><span><b>Also split first, then transcribe</b><small>Slower. Tests whether order changes the words.</small></span><span class="state"></span></button></div>
+          <details class="keys"><summary>Cloud keys (stay on this phone)</summary>
+            <input class="inp" id="k-deepgram" type="password" placeholder="Deepgram key" autocomplete="off">
+            <input class="inp" id="k-openai" type="password" placeholder="OpenAI key" autocomplete="off">
+            <input class="inp" id="k-assembly" type="password" placeholder="AssemblyAI key" autocomplete="off">
+          </details>
+          <button class="btn primary" id="labRun" style="width:100%;height:50px;margin-top:14px;font-size:16px">Run selected</button>
+        </div>
+        <div class="blk"><h3>1 · Transcripts</h3><div id="resAsr"><div class="empty">Nothing run yet.</div></div></div>
+        <div class="blk"><h3>2 · Who spoke when</h3><div id="resDiar"><div class="empty">Nothing run yet.</div></div></div>
+        <div class="blk"><h3>3 · Both together</h3><p class="hint">Every transcriber with every splitter. “Merged” runs them separately and lines them up by time. “Split first” cuts the audio by speaker, then transcribes each piece.</p><div id="resComb"><div class="empty">Needs at least one of each.</div></div></div>
+      </div>
+    </section>
+
     <section class="page" id="pg-actions" aria-label="Actions">
       <div class="scroll">
         <div class="blk">
@@ -46,6 +73,10 @@
           <div class="tiles two" id="doTiles"></div>
         </div>
         <div class="blk">
+          <h3>Access</h3>
+          <button class="tile on" id="permsBtn" style="--c:var(--aether)"><span class="mono-g">Pm</span><span><b>Permissions</b><small id="permsSummary">Review what Rowan can use</small></span><span class="state"></span></button>
+        </div>
+        <div class="blk">
           <h3>Stamps <span class="count" id="stampCount">0</span></h3>
           <div class="stamps" id="stamps"></div>
         </div>
@@ -55,6 +86,8 @@
     <section class="page" id="pg-listen" aria-label="Listening">
       <div class="transcript" id="transcript"></div>
       <div class="fade"></div>
+      <p class="whisper">Tap Rowan to pause · say “Rowan stop” to finish</p>
+      <button class="stopbar" id="stopBtn" aria-label="Stop and save"><i></i><b>Stop &amp; save</b></button>
     </section>
 
     <section class="page" id="pg-schedule" aria-label="Schedule">
@@ -86,16 +119,26 @@
           <h3>Recordings <span class="count" id="noteCount">0</span></h3>
           <div id="noteList"></div>
         </div>
+        <div class="blk">
+          <h3>What Rowan remembers <span class="count" id="memCount">0</span></h3>
+          <p class="hint" style="margin-top:0">Stays on this phone. Things you say once are watched; things you repeat, pin, or tell Rowan to remember become long-term.</p>
+          <div class="memadd"><input class="inp" id="memIn" placeholder="Tell Rowan something to remember"><button class="btn primary" id="memAdd">Add</button></div>
+          <div id="memList"></div>
+          <h3 style="margin-top:20px">Test recall</h3>
+          <div class="memadd"><input class="inp" id="memQ" placeholder="What would Rowan bring up for…"><button class="btn" id="memGo">Recall</button></div>
+          <div id="memOut"></div>
+        </div>
       </div>
     </section>
   </main>
 
   <nav class="dock" id="dock">
     <i class="thumb"></i>
-    <button data-go="0"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6.0L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/></svg>Actions</button>
-    <button data-go="1"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>Listen</button>
-    <button data-go="2"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Schedule</button>
-    <button data-go="3"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 8l8 0M7 9l4 7M17 10l-4 6"/></svg>Notes</button>
+    <button data-go="0"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 001.3 2.2h12.4a1.5 1.5 0 001.3-2.2L14 9V3M7.5 15h9"/></svg>Lab</button>
+    <button data-go="1"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6.0L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/></svg>Actions</button>
+    <button data-go="2"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>Listen</button>
+    <button data-go="3"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Schedule</button>
+    <button data-go="4"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 8l8 0M7 9l4 7M17 10l-4 6"/></svg>Notes</button>
   </nav>
 
   <div class="scrim" id="scrim"></div>
@@ -104,7 +147,10 @@
 </div>
 <script src="app.js"></script>
 <script src="store.js"></script>
+<script src="perms.js"></script>
 <script src="recorder.js"></script>
 <script src="notes.js"></script>
+<script src="memory.js"></script>
+<script src="lab.js"></script>
 </body>
 </html>

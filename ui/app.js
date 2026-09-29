@@ -1,5 +1,5 @@
 (() => {
-const DEMO = location.search.includes('demo'), N = 4;
+const DEMO = location.search.includes('demo'), N = 5, HOME = 2;                 // pages: Lab, Actions, Listen, Schedule, Notes
 const R = window.R = { sessionStamps: [], rec: false };
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const phone = $('#phone'), pager = $('#pager'), pages = $$('.page');
@@ -11,13 +11,13 @@ const pad = n => String(n).padStart(2, '0');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ================= pager + scroll-driven parallax ================= */
-let p = 1, W = pager.clientWidth, raf = 0;
+let p = HOME, W = pager.clientWidth, raf = 0;
 function apply() {
   raf = 0;
   W = pager.clientWidth || 1;
   p = pager.scrollLeft / W;
   phone.style.setProperty('--p', p.toFixed(4));
-  phone.style.setProperty('--a', Math.min(1, Math.abs(p - 1)).toFixed(3));
+  phone.style.setProperty('--a', Math.min(1, Math.abs(p - HOME)).toFixed(3));
   pages.forEach((pg, i) => { const d = i - p; pg.style.setProperty('--d', d.toFixed(3)); pg.style.setProperty('--ad', Math.min(1, Math.abs(d)).toFixed(3)); });
   $$('#titles span').forEach((s, i) => {
     const d = i - p, o = Math.max(0, 1 - Math.abs(d) * 3);
@@ -131,15 +131,17 @@ let stamps = store.get('stamps', []);
 function snapshot(reason) {
   const now = new Date(), last = msgs.slice(-3), s = { id: Date.now(), rec: elapsed, reason: reason || '' };
   if (on.time) s.time = now.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  if (on.loc) s.loc = { place: 'SDSU · Hardy Tower (mock)', lat: 32.7757, lng: -117.0719 };
-  if (on.net) s.net = { type: 'wifi', ssid: 'SDSU-Secure (mock)', rssi: -54 };
+  s.iso = now.toISOString();
+  if (on.loc && R.lastPos) s.loc = R.lastPos;                                   // real GPS fix, only if permission was granted
+  if (R.refreshPos) R.refreshPos();
+  if (on.net) { const c = navigator.connection || {}; s.net = { online: navigator.onLine, type: c.type || c.effectiveType || 'unknown', downlink: c.downlink }; }   // browsers don't expose Wi-Fi name or signal
   if (on.ctx) s.ctx = { msgIds: last.map(m => m.id), last: last.map(m => `${m.who}: ${m.text}`), vec: vec(last.map(m => m.text).join(' ')) };
   return s;
 }
 function renderStamps() {
   $('#stampCount').textContent = stamps.length;
   $('#stamps').innerHTML = stamps.length ? stamps.map(s => {
-    const rows = [['recording', fmt(s.rec)], s.time && ['time', s.time], s.loc && ['location', `${s.loc.place}  ${s.loc.lat}, ${s.loc.lng}`], s.net && ['network', `${s.net.type} · ${s.net.ssid} · ${s.net.rssi} dBm`], s.reason && ['reason', s.reason], s.ctx && ['context', s.ctx.last.join('\n           ')], s.ctx && ['vector', `[${s.ctx.vec.join(', ')}]`]].filter(Boolean);
+    const rows = [['recording', fmt(s.rec)], s.time && ['time', s.time], s.loc && ['location', `${s.loc.lat}, ${s.loc.lng} (±${s.loc.acc} m)`], s.net && ['network', `${s.net.online ? 'online' : 'offline'} · ${s.net.type}`], s.reason && ['reason', s.reason], s.ctx && ['context', s.ctx.last.join('\n           ')], s.ctx && ['vector', `[${s.ctx.vec.join(', ')}]`]].filter(Boolean);
     return `<div class="stamp" data-id="${s.id}"><button><span class="t">${fmt(s.rec)}</span><span class="n">${s.reason ? esc(s.reason) : '<em>no note</em>'}</span><span class="chev">›</span></button><div class="body"><div><pre>${rows.map(([k, v]) => `<b>${k.padEnd(9)}</b> ${esc(v)}`).join('\n')}</pre></div></div></div>`;
   }).join('') : '<div class="empty">No stamps yet. Tap the gold button to drop one.</div>';
 }
@@ -157,7 +159,7 @@ function noteSheet() {
     <label class="field"><span>Reason</span><textarea class="inp" id="note" placeholder="Why does this moment matter?"></textarea></label>
     <div class="field"><span>Quick tag</span>${chipGroup('tag', [['', 'None'], ['Exam', 'On the exam'], ['Confusing', 'Confusing'], ['Idea', 'Idea'], ['Todo', 'To-do']], '')}</div>
     <div class="field"><span>Will be saved with</span><div class="snap">
-      <div><b>recording</b> ${fmt(s.rec)}</div>${s.time ? `<div><b>time</b> ${s.time}</div>` : ''}${s.loc ? `<div><b>location</b> ${s.loc.place}</div>` : ''}${s.net ? `<div><b>network</b> ${s.net.ssid}</div>` : ''}${s.ctx ? `<div><b>context</b> last ${s.ctx.msgIds.length} messages + vector</div>` : ''}</div></div>
+      <div><b>recording</b> ${fmt(s.rec)}</div>${s.time ? `<div><b>time</b> ${s.time}</div>` : ''}${s.loc ? `<div><b>location</b> ${s.loc.lat}, ${s.loc.lng}</div>` : ''}${s.net ? `<div><b>network</b> ${s.net.online ? 'online' : 'offline'} · ${s.net.type}</div>` : ''}${s.ctx ? `<div><b>context</b> last ${s.ctx.msgIds.length} messages + vector</div>` : ''}</div></div>
     <div class="actions-row"><button class="btn ghost" data-x>Cancel</button><button class="btn primary" data-ok>Stamp</button></div>`);
   $('[data-x]', sheet).onclick = closeSheet;
   $('[data-ok]', sheet).onclick = () => { const tag = chosen('tag'), n = $('#note').value.trim(); commitStamp([tag, n].filter(Boolean).join(': ')); closeSheet(); };
@@ -175,13 +177,7 @@ const COL = ['var(--gold)', 'var(--arcane)', 'var(--aether)', 'var(--ember)', 'v
 const LEAD = [[0, 'At time'], [5, '5 min'], [15, '15 min'], [30, '30 min'], [60, '1 hour'], [1440, '1 day']];
 const REP = [['none', 'Never'], ['daily', 'Daily'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly']];
 const ALERTS = [[1, 'Once'], [2, 'Twice'], [0, 'Until I respond']];
-let events = store.get('events', null) || [
-  { id: 1, title: 'Machine Learning lecture', date: dkey(today), time: '10:00', repeat: 'weekdays', notify: true, lead: 15, alerts: 1, color: 1 },
-  { id: 2, title: 'Review loss function slides', date: dkey(today), time: '20:00', repeat: 'none', notify: true, lead: 15, alerts: 2, color: 0 },
-  { id: 3, title: 'Study group', date: dkey(addDays(today, 1)), time: '16:30', repeat: 'weekly', notify: true, lead: 30, alerts: 1, color: 2 },
-  { id: 4, title: 'Midterm: Data Structures', date: dkey(addDays(today, 6)), time: '09:00', repeat: 'none', notify: true, lead: 1440, alerts: 0, color: 3 },
-  { id: 5, title: 'Return library book', date: dkey(addDays(today, 3)), time: '13:00', repeat: 'none', notify: false, lead: 0, alerts: 1, color: 4 },
-];
+let events = store.get('events', []).filter(e => e.id > 5);   // ids 1-5 were removed demo events that early builds may have saved
 let selDay = new Date(today);
 function occursOn(e, d) {
   const s = new Date(e.date + 'T00:00'); if (d < s) return false;
@@ -241,7 +237,7 @@ function save() { store.set('events', events); renderCal(); }
 
 /* ================= boot ================= */
 renderStamps(); renderCal();
-Object.assign(R, { $, $$, store, pad, esc, fmt, toast, openSheet, closeSheet, chipGroup, chosen, phone, pager, go, setElapsed: v => { elapsed = v; }, addSys: null });
-pager.scrollLeft = pager.clientWidth; apply();
+Object.assign(R, { $, $$, store, pad, esc, fmt, toast, openSheet, closeSheet, chipGroup, chosen, phone, pager, go, stamp: commitStamp, setElapsed: v => { elapsed = v; }, addSys: null });
+pager.scrollLeft = HOME * pager.clientWidth; apply();
 if (DEMO) run();
 })();
